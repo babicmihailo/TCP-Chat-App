@@ -28,8 +28,6 @@ void NewUser(int clientSock, int port);
 void TalkTo(int clientSock, int port);
 void* DataSend(void* vargp);
 void* DataReceive(void* vargp);
-void* CheckAvailable(void* vargp);
-void ClearChat(int clientSock);
 
 int main(int argc , char *argv[])
 {
@@ -192,6 +190,7 @@ void TalkTo(int clientSock, int port) //Pokretanje konekcije 2 klijenta
         }
     }
 
+
     struct Node* user = head;
     struct Node* talkTo = head;
     int state = 0;
@@ -259,108 +258,43 @@ void TalkTo(int clientSock, int port) //Pokretanje konekcije 2 klijenta
     }
     if (state == 1) //klijenti su povezani pokrece se zahtev za komunikaciju
     {
-        int* sockp = malloc(DEFAULT_BUFLEN);
-        sockp = &clientSock;
+        user->active = ACTIVE;
+        talkTo->active = ACTIVE;
 
         pthread_t* sendThread;
         pthread_t* receiveThread;
-        pthread_t* availableThread;
-        availableThread = (pthread_t*)malloc(sizeof(pthread_t));
+
         sendThread = (pthread_t*)malloc(sizeof(pthread_t));
         receiveThread = (pthread_t*)malloc(sizeof(pthread_t));
 
-        pthread_create(sendThread, NULL, DataSend, (void *)sockp);
-        pthread_create(availableThread, NULL, CheckAvailable, (void *)sockp);
-        pthread_create(receiveThread, NULL, DataReceive, (void *)sockp);
+        pthread_create(sendThread, NULL, DataSend, (void *)(&clientSock));
+        pthread_create(receiveThread, NULL, DataReceive, (void *)(&clientSock));
 
-        pthread_detach(*availableThread);
         pthread_detach(*sendThread);
-        pthread_join(*receiveThread, NULL);
-        printf("Everything disconnected\n");
+        pthread_detach(*receiveThread);
+        while (1)
+        {
+            if (user->active != ACTIVE || talkTo->active != ACTIVE)
+            {
+                pthread_cancel(*sendThread);
+                pthread_cancel(*receiveThread);
+                break;
+            }
+        }
+        printf("Both users disconnected\n");
+        user->active = 0;
+        user->socketChat = AVAILABLE;
 
-        free(availableThread);
+        talkTo->active = 0;
+        talkTo->socketChat = AVAILABLE;
+
+
         free(sendThread);
         free(receiveThread);
-        free(sockp);
         printf("Freed memory\n");
     }
+
     NumReceive(clientSock, port);
-}
-
-void* CheckAvailable(void* vargp) //
-{
-    int clientSock = *((int*)vargp);
-    struct Node* user = head;
-    struct Node* talkTo = head;
-    while(1)
-    {
-        user = head;
-        while(user != NULL)
-        {
-            if(user->socket == clientSock)
-            {
-                if(user->active == 0)
-                {
-                    talkTo = head;
-                    while(talkTo != NULL)
-                    {
-                        if (talkTo->socketChat == clientSock)
-                        {
-                            talkTo->active = 0;
-                            return NULL;
-                        }
-                    }
-                }
-            }
-            user = user->next;
-        }
-
-        talkTo = head;
-        while(talkTo != NULL)
-        {
-            if(talkTo->socket == clientSock)
-            {
-                if(talkTo->active == 0)
-                {
-                    user = head;
-                    while(user != NULL)
-                    {
-                        if (user->socketChat == clientSock)
-                        {
-                            user->active = 0;
-                            return NULL;
-                        }
-                    }
-                }
-            }
-            talkTo = talkTo->next;
-        }
-    }
-    return NULL;
-}
-
-void ClearChat(int clientSock) //Nakon sto se zavrsila komunikacija oba klijenta se vracaju na stanje dostupan da mogu da udju u komunikaciju ponovo
-{
-    struct Node* user = head;
-    while (user != NULL)
-    {
-        if (user->socket == clientSock)
-        {
-            user->socketChat = AVAILABLE;
-            break;
-        }
-        user = user->next;
-    }
-    user = head;
-    while (user != NULL)
-    {
-        if (user->socketChat == clientSock)
-        {
-            user->socketChat = AVAILABLE;
-            break;
-        }
-        user = user->next;
-    }
 }
 
 void* DataReceive(void* vargp) //thread za primanje podataka
@@ -369,9 +303,8 @@ void* DataReceive(void* vargp) //thread za primanje podataka
     int clientSock = *((int*)vargp);
     struct Node* user = head;
     int otherClientSock;
-    int active = 1;
 
-    while(active)
+    while(1)
     {
         user = head;
         while (user != NULL)
@@ -379,13 +312,12 @@ void* DataReceive(void* vargp) //thread za primanje podataka
             if (user->socket == clientSock)
             {
                 otherClientSock = user->socketChat;
-                active = user->active;
                 break;
             }
             user = user->next;
         }
         char data[DEFAULT_BUFLEN];
-        while(active)
+        while(1)
         {
             size = recv(otherClientSock , data , DEFAULT_BUFLEN , 0);
             if (size == -1)
@@ -407,7 +339,6 @@ void* DataReceive(void* vargp) //thread za primanje podataka
         disconnect = strstr(data, "Disconnect");
         if (disconnect)
         {
-            active = 0;
             user->active = 0;
             puts("Detected Disconnect signal, returning to menu");
             break;
@@ -422,8 +353,7 @@ void* DataSend(void* vargp) //thread za slanje podataka
     int clientSock = *((int*)vargp);
     struct Node* user = head;
     int otherClientSock;
-    int active = 1;
-    while(active)
+    while(1)
     {
         user = head;
         while (user != NULL)
@@ -431,13 +361,12 @@ void* DataSend(void* vargp) //thread za slanje podataka
             if (user->socket == clientSock)
             {
                 otherClientSock = user->socketChat;
-                active = user->active;
                 break;
             }
             user = user->next;
         }
         char data[DEFAULT_BUFLEN];
-        while(active)
+        while(1)
         {
             size = recv(clientSock , data , DEFAULT_BUFLEN , 0);
             if (size == -1)
@@ -459,7 +388,6 @@ void* DataSend(void* vargp) //thread za slanje podataka
         disconnect = strstr(data, "Disconnect");
         if (disconnect)
         {
-            active = 0;
             user->active = 0;
             puts("Detected Disconnect signal, returning to menu");
             break;
@@ -467,7 +395,6 @@ void* DataSend(void* vargp) //thread za slanje podataka
     }
     return NULL;
 }
-
 
 void NumReceive(int clientSock, int port) //Broj funkcije koju je klijent izabrao
 {

@@ -11,6 +11,7 @@
 
 #define DEFAULT_BUFLEN 512
 #define SERVER_PORT    20186
+#define ACTIVE         1
 
 _Bool Port(char* port);
 char* InputUsername(char* allUsernames);
@@ -376,19 +377,25 @@ void ChatSelection(char* username, char* allUsernames, char* talkToUsername, int
         pthread_create(receiveThread, NULL, ReceiveData, (void *)(sockp));
 
         pthread_detach(*receiveThread);
-        pthread_join(*sendThread, NULL);
+        pthread_detach(*sendThread);
+        while(1)
+        {
+            if(active != ACTIVE)
+            {
+                pthread_cancel(*receiveThread);
+                pthread_cancel(*sendThread);
+                break;
+            }
+        }
 
 
         free(sendThread);
         free(receiveThread);
-        free(sockp);
         printf("All done, reseting\n");
         active = 1;
     }
-    else
-    {
-        ChatSelection(username, allUsernames, talkToUsername, sock);
-    }
+
+    Menu(allUsernames, username, sock);
 }
 
 void* SendDataThread(void* vargp) //thread za slanje podataka
