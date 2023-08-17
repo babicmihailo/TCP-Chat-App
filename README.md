@@ -1,5 +1,7 @@
 # TCP User Texting Application with Pthreads
 
+![GitHub License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
+
 Welcome to the TCP User Texting Application! This C-based application enables users to send and receive text messages over a server using the TCP protocol. It encompasses a basic client-server architecture, empowering users to interact in real-time. Additionally, users can log in, send messages to users, list all online users, engage in private one-on-one chats, switch between chats, and all of this is managed using pthreads for concurrent communication.
 
 ## Features
